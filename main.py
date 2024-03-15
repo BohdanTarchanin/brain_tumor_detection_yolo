@@ -4,8 +4,8 @@ import shutil
 import zipfile
 import urllib.request
 import torch
+import subprocess
 from PIL import Image
-from io import BytesIO
 
 # Global constants
 OUTPUT_FOLDER = 'output_models'
@@ -26,14 +26,14 @@ def train_model():
         device = 'cpu'
 
     # Training axial plane
-    !python yolov5/train.py --img 480 --batch 64 --epochs 400 --data ./data/axial/axial.yaml --weights yolov5m.pt --device {device} --name axial --hyp ./data/augmentation.yaml
+    subprocess.run(['python', 'yolov5/train.py', '--img', '480', '--batch', '64', '--epochs', '400', '--data', './data/axial/axial.yaml', '--weights', 'yolov5m.pt', '--device', str(device), '--name', 'axial', '--hyp', './data/augmentation.yaml'])
 
     # Copy the fine-tuned model inside the output folder
     shutil.copyfile('yolov5/runs/train/axial/weights/best.pt', f'{OUTPUT_FOLDER}/tumor_detector_axial.pt')
 
 def detect_tumor(image):
     # Run detection
-    !python yolov5/detect.py --weights output_models/tumor_detector_axial.pt --img 640 --conf 0.4 --source $image --save-txt
+    subprocess.run(['python', 'yolov5/detect.py', '--weights', 'output_models/tumor_detector_axial.pt', '--img', '640', '--conf', '0.4', '--source', image, '--save-txt'])
 
     # Display result
     image_path = 'yolov5/runs/detect/exp/b510dc0d5cd3906018c4dd49b98643_gallery.jpeg'
