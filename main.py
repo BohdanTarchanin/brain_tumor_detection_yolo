@@ -7,3 +7,10 @@ st.write("Ця програма дозволяє завантажувати зо
 
 # Upload MRI image
 uploaded_file = st.file_uploader("Завантажте зображення МРТ", type=["jpg", "jpeg", "png"])
+
+# Display uploaded image
+if uploaded_file is not None:
+    image = Image.open(uploaded_file)
+    st.image(image, caption='Завантажене зображення МРТ', use_column_width=True)
+    st.write("")
+    st.write("Класифікуйте завантажене зображення нижче")
