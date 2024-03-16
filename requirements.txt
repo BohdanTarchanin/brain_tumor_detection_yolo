@@ -3,3 +3,4 @@ torch
 torchvision
 Pillow
 yolov5
+libgl1-mesa-glx
