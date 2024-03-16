@@ -1,59 +1,67 @@
+# main.py
 import streamlit as st
-import os
-import shutil
-import zipfile
-import urllib.request
 import torch
-import subprocess
 from PIL import Image
+import torchvision.transforms as transforms
 
-# Global constants
-OUTPUT_FOLDER = 'output_models'
+# Load YOLOv5 model
+from models.experimental import attempt_load
+from utils.general import non_max_suppression, scale_coords
+from utils.datasets import letterbox
 
-def download_and_unzip_data():
-    if not os.path.isfile('data.zip'):
-        urllib.request.urlretrieve("https://github.com/giuseppebrb/BrainTumorDetection/blob/main/data.zip?raw=true", "data.zip")
+# Title and description
+st.title("Brain Tumor Detection")
+st.write("Upload an MRI image to detect brain tumors.")
 
-    with zipfile.ZipFile("data.zip", "r") as zip_ref:
-        zip_ref.extractall(".")
+# Function to load model
+@st.cache(allow_output_mutation=True)
+def load_model(model_path):
+    model = attempt_load(model_path, map_location=torch.device('cpu'))
+    return model
 
-    os.remove('data.zip')
+# Function to preprocess image
+def preprocess_image(image, img_size=480):
+    img = Image.open(image)
+    img = letterbox(img, new_shape=img_size)[0]
+    img = transforms.ToTensor()(img)
+    img = img.unsqueeze(0)
+    return img
 
-def train_model():
-    if torch.cuda.is_available():
-        device = 0
+# Function to perform inference
+def detect_tumor(image, model):
+    img = preprocess_image(image)
+    img = img.float() / 255.0  
+    img = img if img.ndimension() == 4 else img.unsqueeze(0)
+
+    # Inference
+    pred = model(img, augment=False)[0]
+    pred = non_max_suppression(pred, 0.4, 0.5)
+
+    return pred[0] if len(pred) else None
+
+# Upload MRI image
+uploaded_file = st.file_uploader("Upload MRI Image", type=["jpg", "jpeg", "png"])
+
+if uploaded_file is not None:
+    st.image(uploaded_file, caption='Uploaded MRI Image.', use_column_width=True)
+
+    # Load model
+    model_path = 'model.pt' 
+    model = load_model(model_path)
+
+    # Detect tumor
+    tumor_boxes = detect_tumor(uploaded_file, model)
+
+    # Display results
+    if tumor_boxes is not None:
+        img = Image.open(uploaded_file)
+        img = img.convert("RGB")
+        img = Image.fromarray((255 * img).astype('uint8'), 'RGB')
+
+        for *box, conf, cls in tumor_boxes:
+            box = scale_coords(img.size, box, img.size).round()
+            img = img.crop(box)
+
+        st.image(img, caption='Detected Tumor.', use_column_width=True)
     else:
-        device = 'cpu'
-
-    # Training axial plane
-    subprocess.run(['python', 'yolov5/train.py', '--img', '480', '--batch', '64', '--epochs', '400', '--data', './data/axial/axial.yaml', '--weights', 'yolov5m.pt', '--device', str(device), '--name', 'axial', '--hyp', './data/augmentation.yaml'])
-
-    # Copy the fine-tuned model inside the output folder
-    shutil.copyfile('yolov5/runs/train/axial/weights/best.pt', f'{OUTPUT_FOLDER}/tumor_detector_axial.pt')
-
-def detect_tumor(image):
-    # Run detection
-    subprocess.run(['python', 'yolov5/detect.py', '--weights', 'output_models/tumor_detector_axial.pt', '--img', '640', '--conf', '0.4', '--source', image, '--save-txt'])
-
-    # Display result
-    image_path = 'yolov5/runs/detect/exp/b510dc0d5cd3906018c4dd49b98643_gallery.jpeg'
-    result_image = Image.open(image_path)
-    st.image(result_image, caption='Tumor detection result', use_column_width=True)
-
-def main():
-    st.title('Brain Tumor Detection App')
-
-    # Download and unzip data
-    download_and_unzip_data()
-
-    # Train model
-    train_model()
-
-    uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-
-    if uploaded_image is not None:
-        st.image(uploaded_image, caption='Uploaded Image', use_column_width=True)
-        detect_tumor(uploaded_image)
-
-if __name__ == '__main__':
-    main()
+        st.write("No tumor detected.")
